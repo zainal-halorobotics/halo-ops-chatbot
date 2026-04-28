@@ -118,7 +118,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:#f8f7f4;color:
 
 <script>
 // ── CONFIG — ganti WORKER_URL setelah deploy Cloudflare ──────
-const WORKER_URL = 'GANTI_DENGAN_URL_CLOUDFLARE_WORKER';
+const WORKER_URL = 'https://halo-ops-proxy.zainal-fa1.workers.dev/';
 // contoh: 'https://halo-ops-proxy.zainal-halorobotics.workers.dev'
 
 let DATA = [], chatHistory = [], isThinking = false;
@@ -295,7 +295,7 @@ ${ctx}`;
 
   }catch(err){
     hideTyping();
-    if(WORKER_URL==='GANTI_DENGAN_URL_CLOUDFLARE_WORKER'){
+    if(WORKER_URL==='https://halo-ops-proxy.zainal-fa1.workers.dev/'){
       appendBot(`<span style="color:#d97706">Worker URL belum diisi. Setelah deploy Cloudflare Worker, ganti <b>WORKER_URL</b> di file HTML ini.</span>`);
     } else {
       appendBot(`<span style="color:#dc2626">Error: ${esc(err.message)}</span>`);
