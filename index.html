@@ -118,7 +118,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:#f8f7f4;color:
 
 <script>
 // ── CONFIG — ganti WORKER_URL setelah deploy Cloudflare ──────
-const WORKER_URL = 'https://halo-ops-proxy.zainal-fa1.workers.dev/';
+const WORKER_URL = 'GANTI_DENGAN_URL_CLOUDFLARE_WORKER';
 // contoh: 'https://halo-ops-proxy.zainal-halorobotics.workers.dev'
 
 let DATA = [], chatHistory = [], isThinking = false;
@@ -200,36 +200,56 @@ function mSt(raw){
 
 // ── BUILD CONTEXT ────────────────────────────────────────────
 function buildContext(query){
-  if(!DATA.length)return'Data asset belum dimuat.';
-  const hC={},sC={},tC={},secC={};
-  DATA.forEach(d=>{
-    const h=d['Health Status']||'?';hC[h]=(hC[h]||0)+1;
-    const s=d['Operational Status']||'?';sC[s]=(sC[s]||0)+1;
-    const t=d['Team']||'?';tC[t]=(tC[t]||0)+1;
-    const sec=d['Section']||'?';secC[sec]=(secC[sec]||0)+1;
-  });
-  const overdue=DATA.filter(d=>d['Health Status']==='Require Maintenance'||mSt(d['Next Maintenance'])==='late');
-  const soon=DATA.filter(d=>mSt(d['Next Maintenance'])==='soon');
-  const locC={};
-  DATA.filter(d=>['Active','Project Use'].includes(d['Operational Status']))
-    .forEach(d=>{const l=d['Current Placement'];if(l&&l!=='-')locC[l]=(locC[l]||0)+1;});
-  const q=query.toLowerCase();
-  const relevant=DATA.filter(d=>
-    ['Asset Name','Team','Section','Current Placement','Health Status','Internal Code']
-    .some(k=>(d[k]||'').toLowerCase().includes(q))
-  ).slice(0,20);
-  const fA=d=>`- ${d['Asset Name']} | Kode:${d['Internal Code']||'?'} | Tim:${d['Team']||'?'} | Lokasi:${d['Current Placement']||'?'} | Health:${d['Health Status']||'?'} | Status:${d['Operational Status']||'?'} | NextMaint:${d['Next Maintenance']||'?'} | Jam:${d['Hour / Cycle']||'?'}${d['Maintenance Record Link']?' | Record:'+d['Maintenance Record Link']:''}${d['Sertifikat']?' | Sertifikat:'+d['Sertifikat']:''}`;
+  if(!DATA.length) return 'Data asset belum dimuat.';
 
-  return `=== DATA ASSET HALO ROBOTICS (${NOW.toLocaleDateString('id-ID')}) ===
+  const q = query.toLowerCase();
+
+  // Format every single asset — AI needs full data
+  const fA = d =>
+    `${d['Asset Name']}|Kode:${d['Internal Code']||'-'}|Section:${d['Section']||'-'}|Tim:${d['Team']||'-'}|PIC:${d['PIC']||'-'}|Lokasi:${d['Current Placement']||'-'}|Health:${d['Health Status']||'-'}|Status:${d['Operational Status']||'-'}|Maint:${d['Next Maintenance']||'-'}|Jam:${d['Hour / Cycle']||'-'}|FCC:${d['FCC Status']||'-'}${d['Maintenance Record Link']?'|Record:'+d['Maintenance Record Link']:''}${d['Sertifikat']?'|Sertifikat:'+d['Sertifikat']:''}`;
+
+  // Stats summary
+  const hC={},tC={},secC={};
+  DATA.forEach(d=>{
+    const h=d['Health Status']||'?'; hC[h]=(hC[h]||0)+1;
+    const t=d['Team']||'?'; tC[t]=(tC[t]||0)+1;
+    const s=d['Section']||'?'; secC[s]=(secC[s]||0)+1;
+  });
+
+  const overdue = DATA.filter(d=>d['Health Status']==='Require Maintenance'||mSt(d['Next Maintenance'])==='late');
+  const soon    = DATA.filter(d=>mSt(d['Next Maintenance'])==='soon');
+
+  // Relevant assets for this query (search across all fields)
+  const relevant = DATA.filter(d=>
+    Object.values(d).some(v=>(v||'').toString().toLowerCase().includes(q))
+  );
+
+  // Build full asset list (all 660, compressed format)
+  const allAssets = DATA.map(fA).join('\n');
+
+  return `=== HALO ROBOTICS DRONE ASSET DATABASE (${NOW.toLocaleDateString('id-ID')}) ===
 TOTAL: ${DATA.length} asset
-HEALTH: ${Object.entries(hC).map(([k,v])=>`${k}:${v}`).join(' | ')}
-OPERATIONAL: ${Object.entries(sC).map(([k,v])=>`${k}:${v}`).join(' | ')}
-PER TIM:\n${Object.entries(tC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join('\n')}
-PER KATEGORI:\n${Object.entries(secC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join('\n')}
-OVERDUE/REQUIRE MAINT (${overdue.length}):\n${overdue.slice(0,20).map(fA).join('\n')||'Tidak ada'}
-MAINTENANCE <=30 HARI (${soon.length}):\n${soon.slice(0,15).map(fA).join('\n')||'Tidak ada'}
-TOP LOKASI:\n${Object.entries(locC).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([l,v])=>`${l}: ${v}`).join('\n')}
-${relevant.length?`RELEVAN DENGAN "${query}":\n${relevant.map(fA).join('\n')}`:''}`;
+
+RINGKASAN HEALTH:
+${Object.entries(hC).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+
+PER TIM:
+${Object.entries(tC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+
+PER KATEGORI:
+${Object.entries(secC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+
+OVERDUE/REQUIRE MAINTENANCE (${overdue.length} asset):
+${overdue.map(fA).join('\n')||'Tidak ada'}
+
+MAINTENANCE <=30 HARI (${soon.length} asset):
+${soon.map(fA).join('\n')||'Tidak ada'}
+
+${relevant.length && relevant.length < DATA.length ? `ASSET YANG RELEVAN DENGAN "${query}" (${relevant.length} asset):\n${relevant.map(fA).join('\n')}` : ''}
+
+=== SEMUA ASSET (${DATA.length} records) ===
+Format: NamaAsset|Kode|Section|Tim|PIC|Lokasi|Health|Status|NextMaint|Jam|FCC|Record|Sertifikat
+${allAssets}`;
 }
 
 // ── SEND MESSAGE ─────────────────────────────────────────────
@@ -275,7 +295,7 @@ ${ctx}`;
 
   }catch(err){
     hideTyping();
-    if(WORKER_URL==='https://halo-ops-proxy.zainal-fa1.workers.dev'){
+    if(WORKER_URL==='GANTI_DENGAN_URL_CLOUDFLARE_WORKER'){
       appendBot(`<span style="color:#d97706">Worker URL belum diisi. Setelah deploy Cloudflare Worker, ganti <b>WORKER_URL</b> di file HTML ini.</span>`);
     } else {
       appendBot(`<span style="color:#dc2626">Error: ${esc(err.message)}</span>`);
