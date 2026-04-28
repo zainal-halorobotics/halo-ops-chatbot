@@ -198,58 +198,79 @@ function mSt(raw){
   if(diff<0)return'late';if(diff<=30)return'soon';return'ok';
 }
 
-// ── BUILD CONTEXT ────────────────────────────────────────────
+// ── BUILD CONTEXT (smart filter — kirim data relevan saja) ──
 function buildContext(query){
   if(!DATA.length) return 'Data asset belum dimuat.';
 
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
 
-  // Format every single asset — AI needs full data
+  // Format asset ringkas
   const fA = d =>
-    `${d['Asset Name']}|Kode:${d['Internal Code']||'-'}|Section:${d['Section']||'-'}|Tim:${d['Team']||'-'}|PIC:${d['PIC']||'-'}|Lokasi:${d['Current Placement']||'-'}|Health:${d['Health Status']||'-'}|Status:${d['Operational Status']||'-'}|Maint:${d['Next Maintenance']||'-'}|Jam:${d['Hour / Cycle']||'-'}|FCC:${d['FCC Status']||'-'}${d['Maintenance Record Link']?'|Record:'+d['Maintenance Record Link']:''}${d['Sertifikat']?'|Sertifikat:'+d['Sertifikat']:''}`;
+    `${d['Asset Name']} | Kode:${d['Internal Code']||'-'} | Tim:${d['Team']||'-'} | Lokasi:${d['Current Placement']||'-'} | Health:${d['Health Status']||'-'} | Status:${d['Operational Status']||'-'} | Maint:${d['Next Maintenance']||'-'} | Jam:${d['Hour / Cycle']||'-'}${d['Maintenance Record Link']?' | Record:'+d['Maintenance Record Link']:''}${d['Sertifikat']?' | Sert:'+d['Sertifikat']:''}`;
 
-  // Stats summary
-  const hC={},tC={},secC={};
+  // Statistik ringkas
+  const hC={},tC={},secC={},sC={};
   DATA.forEach(d=>{
     const h=d['Health Status']||'?'; hC[h]=(hC[h]||0)+1;
     const t=d['Team']||'?'; tC[t]=(tC[t]||0)+1;
     const s=d['Section']||'?'; secC[s]=(secC[s]||0)+1;
+    const op=d['Operational Status']||'?'; sC[op]=(sC[op]||0)+1;
   });
 
   const overdue = DATA.filter(d=>d['Health Status']==='Require Maintenance'||mSt(d['Next Maintenance'])==='late');
   const soon    = DATA.filter(d=>mSt(d['Next Maintenance'])==='soon');
 
-  // Relevant assets for this query (search across all fields)
-  const relevant = DATA.filter(d=>
-    Object.values(d).some(v=>(v||'').toString().toLowerCase().includes(q))
-  );
+  // Smart search — cari asset relevan berdasarkan kata kunci query
+  const keywords = q.split(/\s+/).filter(k=>k.length>2);
+  const relevant = DATA.filter(d=>{
+    const haystack = [
+      d['Asset Name'], d['Internal Code'], d['Team'], d['Section'],
+      d['Current Placement'], d['Health Status'], d['Operational Status'],
+      d['PIC'], d['Next Maintenance'], d['Serial Number / License']
+    ].join(' ').toLowerCase();
+    return keywords.some(k => haystack.includes(k));
+  });
 
-  // Build full asset list (all 660, compressed format)
-  const allAssets = DATA.map(fA).join('\n');
+  // Kalau tidak ada yang relevan, ambil semua (untuk pertanyaan umum)
+  const targetAssets = relevant.length > 0 ? relevant : DATA;
 
-  return `=== HALO ROBOTICS DRONE ASSET DATABASE (${NOW.toLocaleDateString('id-ID')}) ===
-TOTAL: ${DATA.length} asset
+  // Batasi 150 asset untuk hemat token, prioritaskan yang relevan
+  const assetList = targetAssets.slice(0, 150);
 
-RINGKASAN HEALTH:
-${Object.entries(hC).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+  const stats = `TOTAL: ${DATA.length} asset
+HEALTH: ${Object.entries(hC).map(([k,v])=>`${k}(${v})`).join(', ')}
+STATUS: ${Object.entries(sC).map(([k,v])=>`${k}(${v})`).join(', ')}
+TIM: ${Object.entries(tC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}:${v}`).join(', ')}
+KATEGORI: ${Object.entries(secC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}:${v}`).join(', ')}
+OVERDUE/REQUIRE MAINT: ${overdue.length} asset
+MAINT <=30 HARI: ${soon.length} asset`;
 
-PER TIM:
-${Object.entries(tC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+  const ctx = relevant.length > 0
+    ? `=== DATA RELEVAN UNTUK "${query}" (${relevant.length} dari ${DATA.length} asset) ===
+${assetList.map(fA).join('\n')}
 
-PER KATEGORI:
-${Object.entries(secC).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k}: ${v}`).join(' | ')}
+=== RINGKASAN SELURUH ARMADA ===
+${stats}
 
-OVERDUE/REQUIRE MAINTENANCE (${overdue.length} asset):
-${overdue.map(fA).join('\n')||'Tidak ada'}
+OVERDUE/REQUIRE MAINT (${overdue.length}):
+${overdue.slice(0,30).map(fA).join('\n')||'Tidak ada'}
 
-MAINTENANCE <=30 HARI (${soon.length} asset):
-${soon.map(fA).join('\n')||'Tidak ada'}
+MAINTENANCE <=30 HARI (${soon.length}):
+${soon.slice(0,20).map(fA).join('\n')||'Tidak ada'}`
 
-${relevant.length && relevant.length < DATA.length ? `ASSET YANG RELEVAN DENGAN "${query}" (${relevant.length} asset):\n${relevant.map(fA).join('\n')}` : ''}
+    : `=== RINGKASAN ARMADA DRONE HALO ROBOTICS ===
+${stats}
 
-=== SEMUA ASSET (${DATA.length} records) ===
-Format: NamaAsset|Kode|Section|Tim|PIC|Lokasi|Health|Status|NextMaint|Jam|FCC|Record|Sertifikat
-${allAssets}`;
+OVERDUE/REQUIRE MAINT (${overdue.length}):
+${overdue.slice(0,30).map(fA).join('\n')||'Tidak ada'}
+
+MAINTENANCE <=30 HARI (${soon.length}):
+${soon.slice(0,20).map(fA).join('\n')||'Tidak ada'}
+
+SAMPLE ASSET (50 pertama):
+${DATA.slice(0,50).map(fA).join('\n')}`;
+
+  return ctx;
 }
 
 // ── SEND MESSAGE ─────────────────────────────────────────────
